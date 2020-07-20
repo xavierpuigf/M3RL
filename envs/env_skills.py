@@ -182,10 +182,10 @@ class Skills_v0:
                pos[1] > 0 and pos[1] < self.map_dim[1] - 1
 
     
-    def _is_reachable(self, agent_id, pos, other_agents):
+    def _is_reachable(self, agent_id, pos, other_agents, ignore_resource=False):
         """check if an agent can reach pos"""
         if not self._is_in_bound(pos) or \
-           self.map[pos[0]][pos[1]] == '*' or self.resources[pos] is not None:
+           self.map[pos[0]][pos[1]] == '*' or (self.resources[pos] is not None and not ignore_resource):
             return False
         for agent in other_agents:
             if agent['pos'] == pos: return False
@@ -218,7 +218,7 @@ class Skills_v0:
         return [self.action_space[action] for action in actions]
 
 
-    def _status_after_action(self, agent_indices, actions, resources=None, agents=None):
+    def _status_after_action(self, agent_indices, actions, resources=None, agents=None, ignore_resource=False):
         """Tentatively taking an action and return the expected new status
         considering pos occupation after previous agents' moves to avoid conflicts
         """
@@ -231,10 +231,11 @@ class Skills_v0:
             for indi_it, indi in enumerate(agent_indices):
                 cur_agents[indi] = copy.deepcopy(agents[indi_it])
 
-
+        # *......X..*
         indices = list(range(len(actions)))
         shuffled_agent_indices = [agent_indices[index] for index in indices]
         shuffled_actions = [actions[index] for index in indices]
+        collected_material = False
         for agent_id, action in zip(shuffled_agent_indices, shuffled_actions):
             agent = cur_agents[agent_id]
             cur_pos = agent['pos']
@@ -262,18 +263,37 @@ class Skills_v0:
 
             other_agents = [cur_agents[i] for i in range(agent_id)] \
                          + [self.agents[i] for i in range(agent_id + 1, self.nb_agents)]
-            if self._is_reachable(agent_id, cur_pos, other_agents):
-                cur_agents[agent_id]['pos'] = cur_pos
+            # print(agent_id, cur_pos, ignore_resource)
+            if self._is_reachable(agent_id, cur_pos, other_agents, ignore_resource):
+                if ignore_resource and cur_resources[cur_pos] is not None and cur_resources[cur_pos]['type'] < self.nb_resource_types:
+                    # Crossing the palce will get you the element
+                    resource_type = cur_resources[cur_pos]['type']
+                    # ipdb.set_trace()
+                    cur_agents[agent_id]['inventory'][resource_type] += 1
+                    # cur_resources[cur_pos] = None
+                    # cur_resources[cur_pos]['collector'] = agent_id
+                    # cur_resources[cur_pos]['hp'] = 0
+                    cur_resources[cur_pos] = None
+                    # print("COLLECTED")
+                elif ignore_resource and cur_resources[cur_pos] is not None:
+                    for resource_type in range(self.nb_resource_types):
+                        cur_agents[agent_id]['inventory'][resource_type] = 0
+                    cur_resources[cur_pos] = None
 
+                    collected_material = True
+                cur_agents[agent_id]['pos'] = cur_pos
+        # if collected_material:
+        #     ipdb.set_trace()
         return cur_resources, cur_agents
 
 
     def send_action(self, agent_indices, actions):
         """send actions for a set of agents"""
-        cur_resources, cur_agents = self._status_after_action(agent_indices, actions)
+        print("o ", self.agents)
+        cur_resources, cur_agents = self._status_after_action(agent_indices, actions, ignore_resource=True)
         self.resources = copy.deepcopy(cur_resources)
         self.agents = copy.deepcopy(cur_agents)
-
+        print("! ", self.agents)
 
     def setup(self, nb_agents=1, nb_resources=1, episode_id=None): 
         """set up a new game"""
@@ -284,6 +304,7 @@ class Skills_v0:
             for col_id in range(self.map_dim[1]):
                 self.resources[(row_id, col_id)] = None
         self.remaining_resources = []#[None] * nb_resources
+        self.dest = []
         self.resource_count = [0] * self.nb_resource_types
         self.agents = [None] * nb_agents
         self.map = copy.deepcopy(self.init_map)
@@ -324,6 +345,44 @@ class Skills_v0:
             self.resource_count[res_type] += 1
 
         self.resource_weights = [None] * nb_agents
+
+
+        dest_count = [0] * self.nb_resource_types
+        print(dest_count)
+        # remaining_dest = []
+        for dest in range(nb_resources):
+            res_type = random.randint(0, self.nb_resource_types - 1)
+            if dest_count[res_type] == 0:
+                while True:
+                    res_pos = (random.randint(1, self.map_dim[0] - 2), random.randint(1, self.map_dim[1] - 2))
+                    if self.resources[res_pos] is None: break
+            else:
+                res_pos = None
+                indices = list(range(len(self.dest)))
+                random.shuffle(indices)
+                for res_id in indices:
+                    prev_res_pos = self.dest[res_id]
+                    if self.resources[prev_res_pos]['type'] == res_type + self.nb_resource_types:
+                        dir_indices = list(range(4))
+                        random.shuffle(dir_indices)
+                        for dir_index in dir_indices:
+                            dx, dy = DX[dir_index], DY[dir_index]
+                            cur_pos = (prev_res_pos[0] + dx, prev_res_pos[1] + dy)
+                            if self._is_in_bound(cur_pos) and self.map[cur_pos[0]][cur_pos[1]] != '*' and \
+                               self.resources[cur_pos] is None:
+                               res_pos = cur_pos
+                               break
+                    if res_pos is not None:
+                        break
+                if res_pos is None:
+                    while True:
+                        res_pos = (random.randint(1, self.map_dim[0] - 2), random.randint(1, self.map_dim[1] - 2))
+                        if self.resources[res_pos] is None: break
+            self.resources[res_pos] = {'type': res_type + self.nb_resource_types, 'sym': 'O',
+                                       'pos': res_pos, 'hp': 10, 'collector': None}
+            self.dest.append(res_pos)
+            dest_count[res_type] += 1
+
         for agent_id in range(nb_agents):
             while True:
                 pos = (random.randint(1, self.map_dim[0] - 2), random.randint(1, self.map_dim[1] - 2))
@@ -352,15 +411,17 @@ class Skills_v0:
                         if found: continue
                     if agent_id == 0 or self.agents[agent_id - 1]['type'] != agent_type or self.nb_agent_types < 3:
                         break
+            agent_inventory = [0] * self.nb_resource_types
             self.agents[agent_id] = {'type': agent_type, 'identity': agent_identity, 'speed': agent_speed, 'desire': agent_desire,
-                                     'pos': pos, 'dir': agent_dir, 'digged': 0}
+                                     'pos': pos, 'dir': agent_dir, 'digged': 0, 'inventory': agent_inventory}
             self.resource_weights[agent_id] = [0] * self.nb_resource_types
             self.resource_weights[agent_id][agent_desire] = 1
+
 
         self.steps = 0
         self.running = True
         self.achieved = [False] * self.nb_goal_types
-
+        # ipdb.set_trace()
 
 
     def search_path(self, time_limit, goal=0, actionable_agents=None, return_actions=True, verbose=0):
@@ -435,10 +496,14 @@ class Skills_v0:
         remaining_res_indices = []
         for res_id, res_pos in enumerate(self.remaining_resources):
             res = self.resources[res_pos]
-            if res['hp'] <= 0:
-                self.collected_res.append(copy.deepcopy(res))
+            if res is None or res['hp'] <= 0:
                 self.resources[res_pos] = None
-                self.resource_count[res['type']] -= 1
+                if res is not None:
+                    self.collected_res.append(copy.deepcopy(res))
+                    self.resource_count[res['type']] -= 1
+                else:
+                    pass
+                    # ipdb.set_trace()
             else:
                 remaining_res_indices.append(res_id)
         self.remaining_resources = [self.remaining_resources[res_id] for res_id in remaining_res_indices]
@@ -480,14 +545,20 @@ class Skills_v0:
                     state[2 + self.nb_resource_types, agent['pos'][0], agent['pos'][1]] = 1
         return state
 
-    def state_to_hash(self, state):
+    def state_to_hash(self, state, count_char_resource=False):
         resources, agents = state
-        resource_hash = np.zeros((self.map_dim[0], self.map_dim[1]))
+        resource_hash = -1 * np.ones((self.map_dim[0], self.map_dim[1]))
         for position, content in resources.items():
             if content is not None:
                 resource_hash[position[0], position[1]] = content['type']
         agent_hash = tuple([(agent['pos'], agent['dir']) for agent in agents])
-        hash_code = (resource_hash.tostring(), agent_hash)
+        if count_char_resource:
+
+            agent_resource_hash = tuple([tuple(agent['inventory']) for agent in agents])
+            print("INVENT", agent_resource_hash)
+            hash_code = (resource_hash.tostring(), agent_hash, agent_resource_hash)
+        else:
+            hash_code = (resource_hash.tostring(), agent_hash)
         return hash_code
 
     def state_from_hash(self, hash):
@@ -498,12 +569,23 @@ class Skills_v0:
 
                 res_pos = (i, k)
                 res_type = int(resource[i][k])
-                resources[res_pos] = {'type': res_type, 'sym': self.resource_syms[res_type],
-                                      'pos': res_pos, 'hp': 10, 'collector': None}
+                if res_type >= 0:
+                    if res_type < self.nb_resource_types:
+                        resources[res_pos] = {'type': res_type, 'sym': self.resource_syms[res_type],
+                                              'pos': res_pos, 'hp': 10, 'collector': None}
+                    else:
+                        resources[res_pos] = {'type': res_type, 'sym': 'O',
+                                              'pos': res_pos, 'hp': 0, 'collector': None}
+
+                else:
+                    resources[res_pos] = None
         agents = copy.deepcopy(self.agents)
         for agent_id, agent in enumerate(agents):
             agent['pos'] = hash[1][agent_id][0]
             agent['dir'] = hash[1][agent_id][1]
+            if len(list(hash)) > 2:
+                agent['inventory'] = list(hash[2][agent_id])
+
         state = resources, agents
         return state
 
@@ -515,15 +597,46 @@ class Skills_v0:
     def get_state(self):
         return self.resources, self.agents
 
-    def print_state(self):
+    def generate_img(self):
         """display the state"""
         cur_map = copy.deepcopy(self.map)
         colors = copy.deepcopy(self.map)
+        for res_pos in self.dest:
+            cur_map[res_pos[0]][res_pos[1]] = 'O'
+
         for agent_id, agent in enumerate(self.agents):
             cur_map[agent['pos'][0]][agent['pos'][1]] = ARROWS[agent['dir']]
             colors[agent['pos'][0]][agent['pos'][1]] = TERM_COLORS[agent_id]
         for res_pos in self.remaining_resources:
             cur_map[res_pos[0]][res_pos[1]] = self.resources[res_pos]['sym']
+
+        res = 8
+        image_out = np.zeros((h*res, w*res, 3))
+        sign2col = {
+            '=': [255, 0, 0],
+            '+': [0, 255, 0],
+            '&': [0, 0, 255],
+            '#': [255, 0, 255],
+            '.': [255, 255, 0],
+            '*': [0, 0, 0]
+        }
+
+
+    def print_state(self):
+        """display the state"""
+        cur_map = copy.deepcopy(self.map)
+        colors = copy.deepcopy(self.map)
+        for res_pos in self.dest:
+            cur_map[res_pos[0]][res_pos[1]] = 'O'
+
+        for agent_id, agent in enumerate(self.agents):
+            cur_map[agent['pos'][0]][agent['pos'][1]] = ARROWS[agent['dir']]
+            colors[agent['pos'][0]][agent['pos'][1]] = TERM_COLORS[agent_id]
+        for res_pos in self.remaining_resources:
+            cur_map[res_pos[0]][res_pos[1]] = self.resources[res_pos]['sym']
+
+
+
         print('map:')
         for row_id in range(self.map_dim[0]):
             for col_id in range(self.map_dim[1]):

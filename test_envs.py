@@ -17,14 +17,45 @@ import ipdb
 from planner import *
 
 if __name__ == '__main__':
+    # env = env_skills.Skills_v0()
+    # env.generate_population()
+    # env.setup()
+    #
+    # planner = planner.LowLevelPlanner(env)
+    # finished = False
+    # while not finished:
+    #     env.print_state()
+    #     state = env.state_to_hash(env.get_state())
+    #     path, cost = planner.get_plan(state, 0, env.remaining_resources[0])
+    #     # path, cost = planner.get_plan(state, 0, (1,2))
+    #     # print(chr(27) + "[2J")
+    #
+    #     # print(path[1][0])
+    #     if len(path) < 2:
+    #         finished = True
+    #     else:
+    #         env.send_action([0], [path[1][0]])
+    #         env.step()
+    # env.print_state()
+
     env = env_skills.Skills_v0()
     env.generate_population()
     env.setup()
-    while True:
+
+    planner = planner.MidLevelPlanner(env)
+    finished = False
+    while not finished:
         env.print_state()
-        planner = planner.LowLevelPlanner(env)
-        state = env.state_to_hash(env.get_state())
-        # planner.get_plan(state, 0, env.remaining_resources[0])
-        path, cost = planner.get_plan(state, 0, (1,2))
-        print(path[1][0])
-        ipdb.set_trace()
+        state = env.state_to_hash(env.get_state(), count_char_resource=True)
+
+        path, cost, st = planner.get_plan(state, 0)
+        # path, cost = planner.get_plan(state, 0, (1,2))
+        # print(chr(27) + "[2J")
+
+        # print(path[1][0])
+        if len(path) < 2:
+            finished = True
+        else:
+            env.send_action([0], [path[1][0][1]])
+            env.step()
+    env.print_state()

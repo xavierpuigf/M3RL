@@ -36,9 +36,9 @@ class SearchTree(object):
         root_node = SearchNode(self.root, action=None, parent=None, action_cost=0, debug=self.debug)
         pq.push(root_node, self.estimated_total_cost(root_node))
         while not pq.isEmpty():
-            print(len(pq))
+            # print(len(pq))
             curr_node = pq.pop()
-            print(curr_node.state[1])
+            # print(curr_node.state[1])
             iter_count += 1
 
             if self.debug and iter_count % 1000 == 0:
@@ -48,7 +48,7 @@ class SearchTree(object):
             curr_state = curr_node.state
             if curr_state in seen:
                 continue
-            print("Adding ", curr_state[1])
+            # print("Adding ", curr_state[1])
             seen.add(curr_state)
             if iter_count > self.max_iter_count:
                 print("Expanded more than the maximum number of allowed states")
@@ -59,7 +59,7 @@ class SearchTree(object):
                 if info: print(
                     "Found goal after: \t{:.2f} seconds,   \t{} state expanded ({:.2f} unique) \t ~{:.2f} expansions/s".format(
                         elapsed_time, iter_count, len(seen) / iter_count, iter_count / elapsed_time))
-                return curr_node.get_path(), curr_node.backwards_cost
+                return curr_node.get_path(), curr_node.backwards_cost, curr_node.state
 
             successors = self.expand(curr_state)
 

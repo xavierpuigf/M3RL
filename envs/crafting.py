@@ -351,9 +351,11 @@ class Crafting_v0:
 
     def send_action(self, agent_indices, actions):
         """send actions for a set of agents"""
+        # print("!!!", self.agents)
         cur_resources, cur_stations, cur_agents, cur_manager_inv = self._status_after_action(agent_indices, actions)
         self.resources = copy.deepcopy(cur_resources)
         self.stations = copy.deepcopy(cur_stations)
+        # print("!oo!", self.agents)
         self.agents = copy.deepcopy(cur_agents)
         self.manager_inv = copy.deepcopy(cur_manager_inv)
 
