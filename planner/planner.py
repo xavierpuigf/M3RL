@@ -1,13 +1,46 @@
 import copy
 from . import search
 import ipdb
+import numpy as np
 
 class LowLevelPlanner:
     def __init__(self, env):
         self.env = copy.deepcopy(env)
+        self.cache = {}
+
+    def _get_walls_only(self, state):
+        # state is unused
+        return ','.join([''.join(r) for r in self.env.map])
+
+
+    def query_cache(self, state, pos_dir_init, pos_dir_end):
+        return None
+        new_state = self._get_walls_only(state)
+        hash = (new_state, pos_dir_init, pos_dir_end)
+        if hash in self.cache:
+            # ipdb.set_trace()
+            return self.cache[hash]
+        else:
+            return None
+
+    def save_cache(self, state, pos_init, pos_end, plan, cost):
+        return None
+        new_state = self._get_walls_only(state)
+        hash = (new_state, pos_init, pos_end)
+        # ipdb.set_trace()
+        self.cache[hash] = (plan, cost, state)
 
     def get_plan(self, current_state, agent_id, goal_pos):
         # self.env.set_state(current_state)
+        curr_res, curr_agents = current_state
+        pos_dir_init = curr_agents[agent_id]
+        pos_init = pos_dir_init[0]
+        pos_end = goal_pos
+
+        cache_val = self.query_cache(current_state, pos_dir_init, pos_end)
+        if cache_val is not None:
+            return cache_val
+
 
         def goal_fn(state_goal):
             curr_res, curr_agents = state_goal
@@ -40,7 +73,9 @@ class LowLevelPlanner:
 
         search_tree = search.SearchTree(current_state, goal_fn, expand_fn, heuristic_fn)
         path, cost, state = search_tree.A_star_graph_search()
-        return path, cost, state
+        path_actions = [p[0] for p in path]
+        self.save_cache(current_state, pos_dir_init, pos_end, path_actions, cost)
+        return path_actions, cost, state
 
 
 class MidLevelPlanner:
@@ -53,13 +88,13 @@ class MidLevelPlanner:
 
         current_state = self.env.state_from_hash(current_state)
         curr_agent = current_state[1][0]
-        print("Expanding", curr_agent)
+        # print("Expanding", curr_agent)
         if sum(curr_agent['inventory']) == 0:
             # Resource collection
             positions = [x for x, y in current_state[0].items() if y is not None and y['type'] < self.env.nb_resource_types]
-            print("COLLECT")
+            # print("COLLECT")
         else:
-            print("PLACE")
+            # print("PLACE")
             # Resource placing
             # print(current_state[0])
             positions = [x for x, y in current_state[0].items() if y is not None and y['type'] >= self.env.nb_resource_types]
@@ -68,21 +103,21 @@ class MidLevelPlanner:
         agent_id = 0
         for position in positions:
             current_state_hash = self.env.state_to_hash(current_state)
-            path, cost, _ = self.ll_planner.get_plan(current_state_hash, 0, position)
+            path_actions, cost, _ = self.ll_planner.get_plan(current_state_hash, 0, position)
             curr_res, curr_agents = current_state
             # ipdb.set_trace()
-            for i in range(1, len(path)):
-                action_name = path[i][0]
+            for i in range(1, len(path_actions)):
+                action_name = path_actions[i]
                 # ipdb.set_trace()
                 final_state = self.env._status_after_action([agent_id], [action_name], curr_res, curr_agents, ignore_resource=True)
                 # print(action_name, final_state[1][0]['pos'])
                 curr_res, curr_agents = final_state
-            path = [x[0] for x in path]
             # print(final_state[1], final_state[0])
-            list_paths.append((path, self.env.state_to_hash(final_state, count_char_resource=True), cost))
+            list_paths.append((path_actions, self.env.state_to_hash(final_state, count_char_resource=True), cost))
         # ipdb.set_trace()
         if len(positions) == 0:
-            ipdb.set_trace()
+            pass
+            # ipdb.set_trace()
         return list_paths
 
     def get_plan(self, current_state, agent_id):

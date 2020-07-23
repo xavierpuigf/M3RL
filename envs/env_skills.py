@@ -16,7 +16,7 @@ from queue import PriorityQueue
 import ipdb
 from collections import deque, namedtuple
 from termcolor import colored
-
+from PIL import Image, ImageFont, ImageDraw
 from utils.utils import *
 
 
@@ -289,11 +289,11 @@ class Skills_v0:
 
     def send_action(self, agent_indices, actions):
         """send actions for a set of agents"""
-        print("o ", self.agents)
+        # print("o ", self.agents)
         cur_resources, cur_agents = self._status_after_action(agent_indices, actions, ignore_resource=True)
         self.resources = copy.deepcopy(cur_resources)
         self.agents = copy.deepcopy(cur_agents)
-        print("! ", self.agents)
+        # print("! ", self.agents)
 
     def setup(self, nb_agents=1, nb_resources=1, episode_id=None): 
         """set up a new game"""
@@ -555,7 +555,7 @@ class Skills_v0:
         if count_char_resource:
 
             agent_resource_hash = tuple([tuple(agent['inventory']) for agent in agents])
-            print("INVENT", agent_resource_hash)
+            # print("INVENT", agent_resource_hash)
             hash_code = (resource_hash.tostring(), agent_hash, agent_resource_hash)
         else:
             hash_code = (resource_hash.tostring(), agent_hash)
@@ -609,17 +609,46 @@ class Skills_v0:
             colors[agent['pos'][0]][agent['pos'][1]] = TERM_COLORS[agent_id]
         for res_pos in self.remaining_resources:
             cur_map[res_pos[0]][res_pos[1]] = self.resources[res_pos]['sym']
-
-        res = 8
-        image_out = np.zeros((h*res, w*res, 3))
-        sign2col = {
+        # ipdb.set_trace()
+        PIXEL_COLORS = {
             '=': [255, 0, 0],
             '+': [0, 255, 0],
             '&': [0, 0, 255],
             '#': [255, 0, 255],
-            '.': [255, 255, 0],
-            '*': [0, 0, 0]
+            '.': [255, 255, 255],
+            '*': [120, 120, 120],
+            'O': [0, 0, 0]
         }
+
+
+        px = 30 # pixel size
+        border = 2 # border width
+        fnt = ImageFont.truetype(font="Pillow/Tests/fonts/FreeMono.ttf", size=px)
+        state_img = Image.new("RGB", ((px + border) * self.map_dim[1] + border,
+                                      (px + border) * self.map_dim[0] + border), color="black")
+        draw_con = ImageDraw.Draw(state_img)
+        # cur_map = copy.deepcopy(self.map)
+        for agent_id, agent in enumerate(self.agents):
+            cur_map[agent['pos'][0]][agent['pos'][1]] = '.'
+        # ipdb.set_trace()
+        for row_id in range(self.map_dim[0]):
+            for col_id in range(self.map_dim[1]):
+                cur_sym = cur_map[row_id][col_id]
+                if cur_sym == 'O':
+                    # ipdb.set_trace()
+                    state_img.paste((255, 255, 255), box=((px + border) * col_id, (px + border) * row_id,
+                                                                       (px + border) * col_id + px,
+                                                                       (px + border) * row_id + px))
+                    draw_con.text(((px + border) * col_id, (px + border) * row_id,
+                                  (px + border) * col_id + px, (px + border) * row_id + px),
+                                 'O', font=fnt, fill=tuple(PIXEL_COLORS[cur_sym]))
+                else:
+                    state_img.paste(tuple(PIXEL_COLORS[cur_sym]), box=((px + border) * col_id, (px + border) * row_id,
+                                                                (px + border) * col_id + px, (px + border) * row_id + px))
+        for agent_id, agent in enumerate(self.agents):
+            draw_con.text(((px + border) * agent['pos'][1], (px + border) * agent['pos'][0]),
+                          ARROWS[agent['dir']], font=fnt, fill=TERM_COLORS[agent_id])
+        return state_img
 
 
     def print_state(self):

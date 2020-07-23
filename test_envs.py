@@ -10,10 +10,12 @@ from __future__ import absolute_import
 from __future__ import division
 import argparse
 import torch
+import time
 
 from agents.M3RL import M3RL
 from envs import *
 import ipdb
+import imageio
 from planner import *
 
 if __name__ == '__main__':
@@ -40,10 +42,13 @@ if __name__ == '__main__':
 
     env = env_skills.Skills_v0()
     env.generate_population()
-    env.setup()
+    env.setup(nb_resources=3)
 
     planner = planner.MidLevelPlanner(env)
     finished = False
+    episode_imgs = []
+
+    start = time.time()
     while not finished:
         env.print_state()
         state = env.state_to_hash(env.get_state(), count_char_resource=True)
@@ -58,4 +63,11 @@ if __name__ == '__main__':
         else:
             env.send_action([0], [path[1][0][1]])
             env.step()
-    env.print_state()
+        # env.print_state()
+        img = env.generate_img()
+        episode_imgs.append(img)
+
+    done = time.time()
+    elapsed = done - start
+    print(elapsed)
+    imageio.mimsave('../viz/episode_test.gif', episode_imgs)
